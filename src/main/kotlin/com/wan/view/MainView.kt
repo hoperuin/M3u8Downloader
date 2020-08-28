@@ -1,6 +1,7 @@
 package com.wan.view
 
 import com.wan.model.Item
+import javafx.scene.control.TextArea
 import javafx.scene.control.TextField
 import javafx.scene.layout.VBox
 import kfoenix.jfxbutton
@@ -8,6 +9,7 @@ import tornadofx.*
 
 class MainView : View("m3u8视频下载合并器 by stars-one") {
     private var m3u8UrlInput by singleAssign<TextField>()//m3u8文件地址输入框
+    private var extInput by singleAssign<TextArea>() //扩展参数,如：http headers
     private var dirInput by singleAssign<TextField>()//下载目录输入框
     private var threadCountInput by singleAssign<TextField>()//多线程数目输入框
     private var outputFileInput by singleAssign<TextField>()//输出文件输入框
@@ -31,6 +33,12 @@ class MainView : View("m3u8视频下载合并器 by stars-one") {
                     text("m3u8文件地址：")
                     m3u8UrlInput = textfield {
                         promptText = "输入m3u8文件的在线地址"
+                    }
+                }
+                field {
+                    text("扩展参数:")
+                    extInput = textarea {
+                        promptText = "输入附加参数,如http headers,key:value,回车换行分割"
                     }
                 }
                 field {
@@ -83,6 +91,7 @@ class MainView : View("m3u8视频下载合并器 by stars-one") {
 
     private fun addNewTask() {
         val m3u8Url = m3u8UrlInput.text
+        var ext = extInput.text
         val threadCount = threadCountInput.text.toInt()
         val dirPath = dirInput.text
         var outputFileName = outputFileInput.text
@@ -95,7 +104,16 @@ class MainView : View("m3u8视频下载合并器 by stars-one") {
                 outputFileName += ".mp4"
             }
         }
-        val item = Item(m3u8Url, outputFileName, threadCount, dirPath)
+        var extParam = HashMap<String,String>()
+        if(ext.isNotBlank()){
+            ext.split("\n").forEach { v ->
+                println(v)
+                var vv = v.split(":",limit = 2)
+                println(vv)
+                extParam.put(vv[0],vv[1])
+            }
+        }
+        val item = Item(m3u8Url, extParam, outputFileName, threadCount, dirPath)
 
         val itemView = ItemView(item)
         contentVbox.add(itemView)

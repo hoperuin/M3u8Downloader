@@ -7,4 +7,4 @@ package com.wan.model
  * @description
  *
  */
-data class Item(var m3u8Url: String,var fileName: String,var threadCount: Int,var dirPath: String)
+data class Item(var m3u8Url: String,var extParam:Map<String,String>?,var fileName: String,var threadCount: Int,var dirPath: String)

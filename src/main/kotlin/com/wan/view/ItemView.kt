@@ -68,15 +68,14 @@ class ItemView : Fragment {
 
     fun startDownload() {
         runAsync {
-            val (m3u8Url, outputFileName, threadCount, dirPath) = item
-            val videoUtil = VideoUtil(m3u8Url, dirPath)
+            val (m3u8Url, extParam, outputFileName, threadCount, dirPath) = item
+            val videoUtil = VideoUtil(m3u8Url, extParam, dirPath)
             runLater {
                 videoName.text = item.fileName
                 videoName.tooltip = Tooltip(item.fileName)
             }
             videoUtil.downloadTsFile(threadCount)//下载所有ts文件
             while (videoUtil.progess!=videoUtil.tsUrls.size) {
-                println(videoUtil.progess)
                 Thread.sleep(100)
                 //更新进度条
                 runLater {

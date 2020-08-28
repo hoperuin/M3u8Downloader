@@ -2,12 +2,13 @@ package com.wan.util
 
 import org.apache.commons.io.FileUtils
 import java.io.File
-import java.net.URL
+import java.net.*
 import java.util.regex.Pattern
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.concurrent.thread
+
 
 /**
  *
@@ -21,7 +22,7 @@ class VideoUtil {
     var downloadedFlag = false
 
     private var dirFile: File? = null
-     var tsUrls = arrayListOf<String>()
+    var tsUrls = arrayListOf<String>()
     private val tsFiles = arrayListOf<File>() //所有ts文件列表
     private val outTsFiles = arrayListOf<File>() //已解密的ts文件列表
     private val tsNames = arrayListOf<String>() //m3u8文件中的正确顺序的ts文件名
@@ -41,7 +42,7 @@ class VideoUtil {
      * @param dirPath 下载的目录（之后下载的ts文件以及合并的输出的mp4文件都在此目录下）
      *
      */
-    constructor(m3u8Url: String, dirPath: String) {
+    constructor(m3u8Url: String, extParam: Map<String, String>?, dirPath: String) {
 
         //输入错误检测（判断m3u8Url是网址）
         val urlRegex = "[a-zA-z]+://[^\\s]*"
@@ -58,7 +59,7 @@ class VideoUtil {
                 //从url下载m3u8文件
                 downloadM3u8File(m3u8Url, dirFile!!)
                 //解析m3u8文件
-                getMessageFromM3u8File(m3u8File)
+                getMessageFromM3u8File(m3u8File, extParam)
                 // 初始化解密工具对象
                 val skey = SecretKeySpec(keyBytes, algorithm)
                 val iv = IvParameterSpec(ivBytes)
@@ -119,20 +120,22 @@ class VideoUtil {
         println("所有ts文件下载完毕")*/
     }
 
-    private fun downloadTsList(tsUrls: List<String>){
+    private fun downloadTsList(tsUrls: List<String>) {
         for (tsUrl in tsUrls) {
-            val tsFile = File(dirFile, tsUrl.substringAfterLast("/"))
+            var fName = tsUrl.substringAfterLast("/")
+            fName = getFileName(fName)
+            val tsFile = File(dirFile, fName)
             if (!tsFile.exists()) {
-                downloadFile(tsUrl, File(dirFile, tsUrl.substringAfterLast("/")))
+                downloadFile(tsUrl, File(dirFile, fName), null)
             }
             tsFiles.add(tsFile)
             progess++
             if (progess == tsUrls.size) {
                 downloadedFlag = true
             }
-            //println("${tsFile.name}文件已下载")
         }
     }
+
     /**
      * 解密所有的ts文件
      */
@@ -165,7 +168,7 @@ class VideoUtil {
      */
     fun mergeTsFile(fileName: String = "out.mp4"): File {
 
-        val outFile = if (!fileName.endsWith(".mp4")) File(dirFile, "$fileName.mp4")  else File(dirFile, fileName)
+        val outFile = if (!fileName.endsWith(".mp4")) File(dirFile, "$fileName.mp4") else File(dirFile, fileName)
         //如果加密了，对解密出来的ts文件合并
         if (isEncrypt) {
             for (tsName in tsNames) {
@@ -204,7 +207,7 @@ class VideoUtil {
     /**
      * 从m3u8文件中获取ts文件的地址、key的信息以及IV
      */
-    private fun getMessageFromM3u8File(m3u8File: File) {
+    private fun getMessageFromM3u8File(m3u8File: File, extParam: Map<String, String>?) {
         val urlRegex = "[a-zA-z]+://[^\\s]*"//网址正则表达式
 
         //读取m3u8（注意是utf-8格式）
@@ -219,11 +222,11 @@ class VideoUtil {
 
                 //keyUrl可能是网址
                 keyBytes = if (Pattern.matches(urlRegex, keyUrl)) {
-                    downloadKeyFile(keyUrl, m3u8File.parentFile)
+                    downloadKeyFile(keyUrl, m3u8File.parentFile, extParam)
                 } else {
                     //不是网址，则进行拼接
                     // 拼接key文件的url文件，并下载在本地，获得key文件的字节数组
-                    downloadKeyFile("$webUrl/$keyUrl", m3u8File.parentFile)
+                    downloadKeyFile("$webUrl/$keyUrl", m3u8File.parentFile, extParam)
                 }
                 //获得偏移量IV字符串
                 val ivString = if (line.contains("IV=0x")) line.substringAfter("IV=0x") else ""
@@ -231,7 +234,7 @@ class VideoUtil {
                 ivBytes = if (ivString.isBlank()) byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) else decodeHex(ivString)
                 isEncrypt = true
             }
-            if (line.endsWith(".ts")) {
+            if (line.contains(".ts")) {
                 //ts是否是链接形式
                 if (Pattern.matches(urlRegex, line)) {
                     val tsName = line.substringAfterLast("/")
@@ -239,12 +242,27 @@ class VideoUtil {
                     tsUrls.add(line)
                 } else {
                     //按顺序添加ts文件名，之后合并需要
-                    tsNames.add(line)
+                    var fName = line
+                    fName = getFileName(fName)
+                    tsNames.add(fName)
                     //拼接ts文件的url地址，添加到列表中
                     tsUrls.add("$webUrl/$line")
                 }
             }
         }
+    }
+
+    private fun getFileName(fName: String): String {
+        var fName1 = fName
+        if (!fName1.endsWith(".ts")) {
+            if (fName1.contains("start=")
+                    && fName1.contains("end=")) {
+                var si = fName1.indexOf("start=") + 6
+                var se = fName1.indexOf("&")
+                fName1 = fName1.substring(si, se)
+            }
+        }
+        return fName1
     }
 
 
@@ -254,7 +272,7 @@ class VideoUtil {
      * @param dirFile 文件夹目录
      */
     private fun downloadM3u8File(m3u8Url: String, dirFile: File) {
-        downloadFile(m3u8Url, File(dirFile, "index.m3u8"))
+        downloadFile(m3u8Url, File(dirFile, "index.m3u8"), null)
     }
 
     /**
@@ -263,9 +281,9 @@ class VideoUtil {
      * @param dirFile 文件夹目录
      * @return key文件的字节数组（之后解密需要）
      */
-    private fun downloadKeyFile(keyUrl: String, dirFile: File): ByteArray {
+    private fun downloadKeyFile(keyUrl: String, dirFile: File, extParam: Map<String, String>?): ByteArray {
         val keyFile = File(dirFile, "key.key")
-        downloadFile(keyUrl, keyFile)
+        downloadFile(keyUrl, keyFile, extParam)
         return keyFile.readBytes()
     }
 
@@ -275,10 +293,28 @@ class VideoUtil {
      * @param url 网址
      * @param file 文件
      */
-    private fun downloadFile(url: String, file: File) {
-        val conn = URL(url).openConnection()
-        conn.setRequestProperty("User-Agent", "Mozilla/4.0 (compatible; MSIE 5.0; Windows NT; DigExt)")
-        val bytes = conn.getInputStream().readBytes()
+    private fun downloadFile(url: String, file: File, extParam: Map<String, String>?) {
+        val u = URL(url)
+        var conn = u.openConnection() as HttpURLConnection
+
+        val cookieManager = CookieManager()
+        CookieHandler.setDefault(cookieManager)
+
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Mobile Safari/537.36")
+        extParam?.forEach { (k, v) ->
+            var vv = v
+            if (k == "cookie" || k == "Cookie") {
+                val cookies = HttpCookie.parse(v)
+                cookies.forEach { cookie -> cookieManager.cookieStore.add(null, cookie) }
+                conn.setRequestProperty("Cookie",
+                        cookieManager.cookieStore.cookies.joinToString(";"));
+            } else {
+                conn.setRequestProperty(k, vv)
+            }
+        }
+        conn.requestMethod = "GET"
+
+        val bytes = conn.inputStream.buffered(512).readBytes()
         file.writeBytes(bytes)
     }
 
